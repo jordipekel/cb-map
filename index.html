@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<title>CB Radio Wereldkaart Log</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<style>
+  body { margin:0; font-family: Arial; }
+  #map { height: 70vh; }
+  .panel {
+    padding: 10px;
+    background: #111;
+    color: white;
+  }
+  input, button {
+    padding: 6px;
+    margin: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <h3>📡 CB Radio Logboek</h3>
+
+  <input id="lat" placeholder="Latitude">
+  <input id="lng" placeholder="Longitude">
+  <input id="signal" placeholder="Signaal (1-5 of dB)">
+  <button onclick="addPoint()">Opslaan</button>
+</div>
+
+<div id="map"></div>
+
+<script type="module">
+  // Firebase import
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, addDoc, getDocs } 
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  // 🔧 JOUW FIREBASE CONFIG HIER INVULLEN
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "XXXX",
+    appId: "XXXX"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const col = collection(db, "cb_logs");
+
+  // kaart
+  const map = L.map('map').setView([52.2, 5.3], 6); // NL start
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18
+  }).addTo(map);
+
+  // kleur op basis van signaal
+  function color(signal) {
+    if (signal >= 4) return "red";
+    if (signal == 3) return "orange";
+    return "green";
+  }
+
+  // laad bestaande data
+  async function load() {
+    const snap = await getDocs(col);
+    snap.forEach(doc => {
+      const d = doc.data();
+      L.circleMarker([d.lat, d.lng], {
+        radius: 8,
+        color: color(d.signal)
+      }).addTo(map)
+        .bindPopup(`Signaal: ${d.signal}`);
+    });
+  }
+
+  load();
+
+  // toevoegen
+  window.addPoint = async function() {
+    const lat = parseFloat(document.getElementById("lat").value);
+    const lng = parseFloat(document.getElementById("lng").value);
+    const signal = parseInt(document.getElementById("signal").value);
+
+    await addDoc(col, { lat, lng, signal });
+
+    L.circleMarker([lat, lng], {
+      radius: 8,
+      color: color(signal)
+    }).addTo(map)
+      .bindPopup(`Signaal: ${signal}`);
+  }
+</script>
+
+</body>
+</html>
