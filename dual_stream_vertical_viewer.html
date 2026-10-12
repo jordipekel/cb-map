@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dual Vertical Stream Viewer</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        twitch: '#9146FF',
+                        youtube: '#FF0000',
+                        darkBg: '#0e0e10',
+                        cardBg: '#18181b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0e0e10;
+            color: #efeff1;
+        }
+
+        .stream-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+        }
+
+        .stream-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* Control Panel Transition */
+        .control-panel {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+        }
+
+        .control-panel.collapsed {
+            transform: translateY(-100%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .glass-panel {
+            background: rgba(24, 24, 27, 0.95);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="font-sans antialiased flex flex-col h-screen select-none">
+
+    <!-- Besturingsbalk / Control Panel -->
+    <header id="controlPanel" class="control-panel glass-panel absolute top-0 left-0 right-0 z-50 p-3 sm:p-4 shadow-2xl">
+        <div class="max-w-7xl mx-auto flex flex-col gap-3">
+            
+            <!-- Titel & Acties -->
+            <div class="flex items-center justify-between border-b border-gray-800 pb-2">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid font-bold fa-display text-purple-500 text-lg"></i>
+                    <h1 class="font-bold text-sm sm:text-base tracking-wide text-gray-100">Dual Stream Vertical Viewer</h1>
+                </div>
+                <div class="flex items-center gap-2">
+                    <!-- Fullscreen knop -->
+                    <button onclick="toggleFullscreen()" class="bg-gray-800 hover:bg-gray-700 text-xs sm:text-sm text-gray-200 px-3 py-1.5 rounded-lg transition flex items-center gap-2 border border-gray-700">
+                        <i class="fa-solid fa-expand"></i>
+                        <span class="hidden sm:inline">Fullscreen</span>
+                    </button>
+                    <!-- Inklap knop -->
+                    <button onclick="toggleControls()" class="bg-purple-600 hover:bg-purple-700 text-xs sm:text-sm text-white px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 font-medium shadow-md">
+                        <i class="fa-solid fa-chevron-up"></i>
+                        <span>Verbergen</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Waarschuwingsbanner voor lokale file:// opening -->
+            <div id="fileWarningBanner" class="hidden bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 text-xs text-amber-200 flex items-start gap-2">
+                <i class="fa-solid fa-triangle-exclamation text-amber-400 text-base shrink-0 mt-0.5"></i>
+                <div>
+                    <strong class="font-semibold text-amber-300">Let op (Twitch Beveiliging):</strong> Je opent dit bestand rechtstreeks van je schijf (<code>file://</code>). Twitch vereist dat een pagina via een webserver draait (zoals <code>localhost</code>). 
+                    <br>
+                    <span class="text-amber-200/80">Oplossing: Gebruik VS Code <b>Live Server</b>, of run <code>python -m http.server 8000</code> in de map van dit bestand en open <a href="http://localhost:8000" target="_blank" class="underline text-amber-300">http://localhost:8000</a>.</span>
+                </div>
+            </div>
+
+            <!-- Inputs Grid voor beide streams -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                <!-- Stream 1 Controls (Boven) -->
+                <div class="bg-gray-900/60 p-2.5 rounded-xl border border-gray-800/80 flex flex-col gap-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-arrow-up font-bold"></i> Stream 1 (Boven)
+                        </span>
+                        <div class="flex items-center gap-1 text-xs text-gray-400">
+                            <label class="cursor-pointer flex items-center gap-1 hover:text-white">
+                                <input type="radio" name="platform1" value="twitch" checked onchange="updatePlatformUI(1)" class="accent-purple-500"> Twitch
+                            </label>
+                            <label class="cursor-pointer flex items-center gap-1 hover:text-white ml-2">
+                                <input type="radio" name="platform1" value="youtube" onchange="updatePlatformUI(1)" class="accent-red-500"> YouTube
+                            </label>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="streamInput1" value="https://www.twitch.tv/noanoella" placeholder="Twitch kanaal of YouTube URL" 
+                            class="bg-gray-950 border border-gray-700 text-xs sm:text-sm rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent block w-full p-2 text-white placeholder-gray-500">
+                        <button onclick="loadStream(1)" class="bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs px-3 rounded-lg transition shrink-0 flex items-center gap-1">
+                            <i class="fa-solid fa-play"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stream 2 Controls (Onder) -->
+                <div class="bg-gray-900/60 p-2.5 rounded-xl border border-gray-800/80 flex flex-col gap-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-arrow-down font-bold"></i> Stream 2 (Onder)
+                        </span>
+                        <div class="flex items-center gap-1 text-xs text-gray-400">
+                            <label class="cursor-pointer flex items-center gap-1 hover:text-white">
+                                <input type="radio" name="platform2" value="twitch" checked onchange="updatePlatformUI(2)" class="accent-purple-500"> Twitch
+                            </label>
+                            <label class="cursor-pointer flex items-center gap-1 hover:text-white ml-2">
+                                <input type="radio" name="platform2" value="youtube" onchange="updatePlatformUI(2)" class="accent-red-500"> YouTube
+                            </label>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="streamInput2" value="https://www.twitch.tv/kingkontent" placeholder="Twitch kanaal of YouTube URL" 
+                            class="bg-gray-950 border border-gray-700 text-xs sm:text-sm rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent block w-full p-2 text-white placeholder-gray-500">
+                        <button onclick="loadStream(2)" class="bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs px-3 rounded-lg transition shrink-0 flex items-center gap-1">
+                            <i class="fa-solid fa-play"></i>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Snelle actieknoppen onderin menu -->
+            <div class="flex items-center justify-between text-xs text-gray-400 pt-1">
+                <span>Tip: Druk op <b>'H'</b> op je toetsenbord om het menu snel te verbergen of te tonen.</span>
+                <button onclick="loadBothStreams()" class="bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-1 rounded-md transition font-medium border border-gray-700">
+                    <i class="fa-solid fa-rotate text-purple-400 mr-1"></i> Beide streams herladen
+                </button>
+            </div>
+
+        </div>
+    </header>
+
+    <!-- Drijvende knop om menu weer te tonen -->
+    <button id="showMenuBtn" onclick="toggleControls()" 
+        class="hidden fixed top-3 right-3 z-40 bg-purple-600/80 hover:bg-purple-600 text-white p-2.5 rounded-full shadow-lg backdrop-blur-md transition-all hover:scale-110 group border border-purple-400/30">
+        <i class="fa-solid fa-sliders text-sm group-hover:rotate-90 transition-transform duration-300"></i>
+    </button>
+
+    <!-- Hoofdcontainer voor gestapelde video's (50% / 50%) -->
+    <main class="flex-1 flex flex-col h-full w-full overflow-hidden">
+        
+        <!-- Stream 1 (Bovenste helft) -->
+        <section class="stream-container flex-1 border-b border-gray-800/80 relative">
+            <div id="streamWrapper1" class="w-full h-full"></div>
+            <div class="absolute top-2 left-2 z-10 pointer-events-none opacity-40 hover:opacity-100 transition">
+                <span class="bg-black/60 text-white text-[10px] font-semibold px-2 py-0.5 rounded backdrop-blur-sm border border-white/10">
+                    STREAM 1
+                </span>
+            </div>
+        </section>
+
+        <!-- Stream 2 (Onderste helft) -->
+        <section class="stream-container flex-1 relative">
+            <div id="streamWrapper2" class="w-full h-full"></div>
+            <div class="absolute top-2 left-2 z-10 pointer-events-none opacity-40 hover:opacity-100 transition">
+                <span class="bg-black/60 text-white text-[10px] font-semibold px-2 py-0.5 rounded backdrop-blur-sm border border-white/10">
+                    STREAM 2
+                </span>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // Extract Twitch Channel Name from input or full URL
+        function extractTwitchChannel(input) {
+            if (!input) return '';
+            let str = input.trim();
+            // Verwijder eventuele query parameters of trailing slashes
+            str = str.split('?')[0].replace(/\/+$/, '');
+            // Extraheer de kanaalnaam na twitch.tv/
+            if (str.includes('twitch.tv/')) {
+                const parts = str.split('twitch.tv/');
+                return parts[parts.length - 1].toLowerCase();
+            }
+            return str.toLowerCase();
+        }
+
+        // Extract YouTube Video ID from input or full URL
+        function extractYouTubeID(input) {
+            if (!input) return '';
+            let str = input.trim();
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|live\/)([^#&?]*).*/;
+            const match = str.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : str;
+        }
+
+        // Bepaal de Twitch Parents voor het omzeilen van de beveiligingsfout
+        function getTwitchParents() {
+            const hostname = window.location.hostname;
+            // Als de pagina via file:// wordt geïmplementeerd, voeg veelgebruikte dev hosts toe
+            if (!hostname || window.location.protocol === 'file:') {
+                return '&parent=localhost&parent=127.0.0.1';
+            }
+            return `&parent=${hostname}`;
+        }
+
+        // Bouw de iframe URL
+        function buildEmbedURL(platform, inputVal) {
+            if (platform === 'twitch') {
+                const channel = extractTwitchChannel(inputVal);
+                const parents = getTwitchParents();
+                return `https://player.twitch.tv/?channel=${channel}${parents}&autoplay=true`;
+            } else if (platform === 'youtube') {
+                const videoId = extractYouTubeID(inputVal);
+                return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0&enablejsapi=1&rel=0`;
+            }
+            return '';
+        }
+
+        // Laad specifieke stream
+        function loadStream(streamIndex) {
+            const platform = document.querySelector(`input[name="platform${streamIndex}"]:checked`).value;
+            const inputVal = document.getElementById(`streamInput${streamIndex}`).value;
+            const wrapper = document.getElementById(`streamWrapper${streamIndex}`);
+
+            if (!inputVal.trim()) {
+                wrapper.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 text-sm">Geen stream/video ingevoerd</div>`;
+                return;
+            }
+
+            const embedUrl = buildEmbedURL(platform, inputVal);
+
+            wrapper.innerHTML = `
+                <iframe 
+                    class="stream-iframe"
+                    src="${embedUrl}" 
+                    allowfullscreen="true" 
+                    scrolling="no" 
+                    allow="autoplay; fullscreen; encrypted-media; picture-in-picture">
+                </iframe>
+            `;
+        }
+
+        // Laad beide streams tegelijk
+        function loadBothStreams() {
+            loadStream(1);
+            loadStream(2);
+        }
+
+        // Menu verbergen / tonen
+        function toggleControls() {
+            const panel = document.getElementById('controlPanel');
+            const showBtn = document.getElementById('showMenuBtn');
+            
+            panel.classList.toggle('collapsed');
+            
+            if (panel.classList.contains('collapsed')) {
+                showBtn.classList.remove('hidden');
+            } else {
+                showBtn.classList.add('hidden');
+            }
+        }
+
+        // Fullscreen Toggle
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.error(`Fout bij instellen fullscreen: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        // Sneltoetsen (H voor menu, F voor Fullscreen)
+        document.addEventListener('keydown', function(event) {
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            if (event.key === 'h' || event.key === 'H') {
+                toggleControls();
+            }
+            if (event.key === 'f' || event.key === 'F') {
+                toggleFullscreen();
+            }
+        });
+
+        // Pagina load afhandeling
+        window.onload = function() {
+            // Controleer of het via file:// is geopend
+            if (window.location.protocol === 'file:') {
+                document.getElementById('fileWarningBanner').classList.remove('hidden');
+            }
+
+            loadBothStreams();
+        };
+    </script>
+</body>
+</html>
